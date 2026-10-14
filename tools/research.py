@@ -55,29 +55,48 @@ def vtt_to_text(vtt):
 
 # ---------------------------------------------------------------- YouTube
 
+def pick_subtitle(info, wanted):
+    """Wählt genau eine Untertitelspur: erst manuelle in Wunschsprache, dann Auto-Untertitel
+    in Originalsprache. Auto-Übersetzungen werden gemieden – YouTube antwortet darauf oft mit 429."""
+    manual, auto = info.get("subtitles") or {}, info.get("automatic_captions") or {}
+    for lang in wanted:
+        if lang in manual:
+            return lang, False
+    orig = info.get("language") or ""
+    for lang in [f"{orig}-orig", orig, *wanted]:
+        if lang and lang in auto:
+            return lang, True
+    return None, False
+
+
 def youtube(args):
     import yt_dlp
 
-    opts = {
-        "skip_download": not args.media,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": args.lang.split(","),
-        "subtitlesformat": "vtt",
-        "quiet": True,
-        "no_warnings": True,
-    }
-    with yt_dlp.YoutubeDL({**opts, "skip_download": True}) as ydl:
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
         info = ydl.extract_info(args.url, download=False)
     d = out_dir("yt", info.get("title", info["id"]))
-    opts["outtmpl"] = str(d / "media" / "%(id)s.%(ext)s")
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([args.url])
-
     meta = {k: info.get(k) for k in (
-        "id", "title", "channel", "channel_url", "upload_date", "duration",
+        "id", "title", "channel", "channel_url", "upload_date", "duration", "language",
         "view_count", "like_count", "comment_count", "tags", "description", "webpage_url")}
     write_json(d / "meta.json", meta)
+
+    lang, is_auto = pick_subtitle(info, args.lang.split(","))
+    opts = {
+        "skip_download": not args.media,
+        "writesubtitles": bool(lang) and not is_auto,
+        "writeautomaticsub": is_auto,
+        "subtitleslangs": [lang] if lang else [],
+        "subtitlesformat": "vtt",
+        "outtmpl": str(d / "media" / "%(id)s.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.process_ie_result(info, download=True)
+    except yt_dlp.utils.DownloadError as e:
+        print(f"Download teilweise fehlgeschlagen: {e}", file=sys.stderr)
 
     subs = sorted((d / "media").glob("*.vtt"))
     if subs:
