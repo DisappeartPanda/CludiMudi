@@ -1,0 +1,7 @@
+# Heruntergeladene Videos/Audio (groß, fremde Inhalte) – nicht committen
+research/*/media/
+# Zugangsdaten und Instaloader-Sessions
+.env
+*.session
+session-*
+__pycache__/
