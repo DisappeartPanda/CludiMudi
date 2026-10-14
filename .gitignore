@@ -3,5 +3,5 @@ research/*/media/
 # Zugangsdaten und Instaloader-Sessions
 .env
 *.session
-session-*
+/session-*
 __pycache__/
